@@ -1,7 +1,41 @@
 def main():
-	string = "able"
+	string = "collectiv"
 	candidateSet = candidates(string)
-	print(candidateSet)
+	wordFile = open("text.txt", "r")
+	wordSet = loadWords(wordFile)
+	possibleWords = wordSet.intersection(candidateSet)
+	print(possibleWords)
+
+	wordFile.close()
+
+def loadWords(wordFile):
+	wordSet = set()
+	text = wordFile.read()
+	wordList = text.split()
+	for i in range(len(wordList)):
+		uncleanedWord = wordList[i]
+		word = clean(uncleanedWord.lower())
+		if isWord(word):
+			wordSet.add(word)
+	return wordSet
+
+def clean(word):
+	removeList = ["?", ",", ".", "'", '"', "!", "*", ":", ";", "", "[", "]", "(", ")", "{", "}"]
+	for char in word:
+		if char in removeList:
+			word = word.replace(char, "")
+	return word
+
+def isWord(word):
+	for char in word:
+		if not isAlpha(char) and char != "-":
+			return False
+	return True
+
+def isAlpha(char):
+	if 97 <= ord(char) and ord(char) <= 122:
+		return True
+	return False
 
 def candidates(string):
 	masterSet = set()
