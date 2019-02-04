@@ -1,12 +1,71 @@
 def main():
-	string = "collectiv"
-	candidateSet = candidates(string)
 	wordFile = open("text.txt", "r")
 	wordSet = loadWords(wordFile)
-	possibleWords = wordSet.intersection(candidateSet)
-	print(possibleWords)
+	testFile = open("testSet.txt", "r")
+	test = loadTestSet(testFile)
+	successes = []
+	failures = {}
+	for word in test.keys():
+		guess = correct(word, wordSet)
+		if guess == test[word]:
+			successes.append(guess)
+		else:
+			failures.update({word: guess})
+
+	print("{} Correct\n {} Incorrect\n {}".format(len(successes), len(failures.keys()), failures))
 
 	wordFile.close()
+	testFile.close()
+
+def loadTestSet(testFile):
+	testMap = {}
+	for line in testFile:
+		lineList = line.split(":")
+		correct = lineList[0]
+		mispellings = lineList[1].split()
+		for mispelling in mispellings:
+			testMap.update({mispelling : correct})
+	return testMap
+
+def correct(word, wordSet):
+	if word in wordSet:
+		return word
+	wordCounter = letterCounter(word)
+	candidateSet = candidates(word)
+	possibleWords = wordSet.intersection(candidateSet)
+	minVal = None
+	correction = None
+	for item in possibleWords:
+		possibleCounter = letterCounter(item)
+		chi2Stat = chiSquareTestStat(wordCounter, possibleCounter)
+		if minVal == None:
+			correction = item
+			minVal = chi2Stat
+		else:
+			if chi2Stat < minVal:
+				minVal = chi2Stat
+				correction = item
+	return correction 
+
+def letterCounter(word):
+	letterList = [1]*26
+	for char in word:
+		if char != "-":
+			letterList[ord(char) - 97] += 1
+	return letterList
+
+def chiSquareTestStat(observed, expected):
+	broken = False
+	if len(observed) != len(expected):
+		broken = True
+		print("ERROR: The length of observed does not equal the length of expected!")
+
+	if not broken:
+		stat = 0
+		for i in range(len(observed)):
+			stat += (observed[i] - expected[i])**2 / expected[i]
+		return stat
+	return None
 
 def loadWords(wordFile):
 	wordSet = set()
