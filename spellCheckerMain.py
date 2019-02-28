@@ -1,148 +1,123 @@
+import re
+import math
+from collections import Counter
+
 def main():
-	wordFile = open("text.txt", "r")
-	wordSet = loadWords(wordFile)
-	testFile = open("testSet.txt", "r")
-	test = loadTestSet(testFile)
-	successes = []
-	failures = {}
-	for word in test.keys():
-		guess = correct(word, wordSet)
-		if guess == test[word]:
-			successes.append(guess)
-		else:
-			failures.update({word: guess})
+    getTestData()
 
-	print("{} Correct\n {} Incorrect\n {}".format(len(successes), len(failures.keys()), failures))
-
-	wordFile.close()
-	testFile.close()
+def getTestData():
+    testFile = open("testSet.txt", "r")
+    outfile = open("testOutcomes.csv", "w")
+    test = loadTestSet(testFile)
+    outfile.write("incorrectWord,correctWord,freq,candidateCount,incorrectLength,correctLength,norvigGuess,norvigSuccess,chiSquareGuess,chiSquareSuccess,gtestGuess,gtestSuccess\n")
+    for word in test.keys():
+        norvigGuess = norvigCorrection(word)
+        norvigSuccess = 0
+        chisquareGuess = chiSquareCorrection(word)
+        chisquareSuccess = 0
+        gtestGuess = gtestCorrection(word)
+        gtestSuccess = 0
+        if norvigGuess == test[word]:
+            norvigSuccess = 1
+        if chisquareGuess == test[word]:
+            chisquareSuccess = 1
+        if gtestGuess == test[word]:
+            gtestSuccess = 1 
+        freq = P(test[word])
+        candidateCount = len(candidates(word))
+        outfile.write("{},{},{},{},{},{},{},{},{},{},{},{}\n".format(word, test[word], freq, candidateCount, len(word), len(test[word]),
+                                                                     norvigGuess, norvigSuccess, chisquareGuess, chisquareSuccess,
+                                                                     gtestGuess, gtestSuccess))
+    testFile.close()
+    outfile.close()
 
 def loadTestSet(testFile):
-	testMap = {}
-	for line in testFile:
-		lineList = line.split(":")
-		correct = lineList[0]
-		mispellings = lineList[1].split()
-		for mispelling in mispellings:
-			testMap.update({mispelling : correct})
-	return testMap
+    testMap = {}
+    for line in testFile:
+        lineList = line.split(":")
+        correct = lineList[0]
+        mispellings = lineList[1].split()
+        for mispelling in mispellings:
+            testMap.update({mispelling : correct})
+    return testMap
 
-def correct(word, wordSet):
-	if word in wordSet:
-		return word
-	wordCounter = letterCounter(word)
-	candidateSet = candidates(word)
-	possibleWords = wordSet.intersection(candidateSet)
-	minVal = None
-	correction = None
-	for item in possibleWords:
-		possibleCounter = letterCounter(item)
-		chi2Stat = chiSquareTestStat(wordCounter, possibleCounter)
-		if minVal == None:
-			correction = item
-			minVal = chi2Stat
-		else:
-			if chi2Stat < minVal:
-				minVal = chi2Stat
-				correction = item
-	return correction 
+# def fisherExactTest(expected, observed):
+    ##implementation of a fisher exact test
+    
+def gtest(expected, observed):
+    stat = 0
+    for i in range(len(expected)):
+        stat += observed[i]*math.log(observed[i]/expected[i])
+    return 2*stat
 
-def letterCounter(word):
-	letterList = [1]*26
-	for char in word:
-		if char != "-":
-			letterList[ord(char) - 97] += 1
-	return letterList
+def chisquareTest(expected, observed):
+    stat = 0
+    for i in range(len(expected)):
+        stat += (observed[i] - expected[i])**2/expected[i]
+    return stat
 
-def chiSquareTestStat(observed, expected):
-	broken = False
-	if len(observed) != len(expected):
-		broken = True
-		print("ERROR: The length of observed does not equal the length of expected!")
+def gtestCorrection(word):
+    expected = [1]*26
+    for char in word:
+        if 97 <= ord(char) and ord(char) <= 122:
+            expected[ord(char)-97] += 1
+    candidateSet = candidates(word)
+    candidateMap = {}
+    for candidate in candidateSet:
+        observed = [1]*26
+        for char in candidate:
+            if 97 <= ord(char) and ord(char) <= 122:
+                observed[ord(char)-97] += 1
+        candidateMap.update({candidate:gtest(expected,observed)})
+    return max(candidateMap.keys(), key=lambda key: candidateMap[key])    
 
-	if not broken:
-		stat = 0
-		for i in range(len(observed)):
-			stat += (observed[i] - expected[i])**2 / expected[i]
-		return stat
-	return None
+def chiSquareCorrection(word):
+    expected = [1]*26
+    for char in word:
+        if 97 <= ord(char) and ord(char) <= 122:
+            expected[ord(char)-97] += 1
+    candidateSet = candidates(word)
+    candidateMap = {}
+    for candidate in candidateSet:
+        observed = [1]*26
+        for char in candidate:
+            if 97 <= ord(char) and ord(char) <= 122:
+                observed[ord(char)-97] += 1
+        candidateMap.update({candidate:chisquareTest(expected,observed)})
+    return max(candidateMap.keys(), key=lambda key: candidateMap[key])
 
-def loadWords(wordFile):
-	wordSet = set()
-	text = wordFile.read()
-	wordList = text.split()
-	for i in range(len(wordList)):
-		uncleanedWord = wordList[i]
-		word = clean(uncleanedWord.lower())
-		if isWord(word):
-			wordSet.add(word)
-	return wordSet
+def words(text): return re.findall(r'\w+', text.lower())
 
-def clean(word):
-	removeList = ["?", ",", ".", "'", '"', "!", "*", ":", ";", "", "[", "]", "(", ")", "{", "}"]
-	for char in word:
-		if char in removeList:
-			word = word.replace(char, "")
-	return word
+WORDS = Counter(words(open('text.txt').read()))
 
-def isWord(word):
-	for char in word:
-		if not isAlpha(char) and char != "-":
-			return False
-	return True
+def P(word, N=sum(WORDS.values())): 
+    "Probability of `word`."
+    return WORDS[word] / N
 
-def isAlpha(char):
-	if 97 <= ord(char) and ord(char) <= 122:
-		return True
-	return False
+def norvigCorrection(word): 
+    "Most probable spelling correction for word."
+    return max(candidates(word), key=P)
 
-def candidates(string):
-	masterSet = set()
-	replacements(string, masterSet)
-	deletions(string, masterSet)
-	swaps(string, masterSet)
-	inserts(string, masterSet)
-	for item in masterSet.copy():
-		replacements(item, masterSet)
-		deletions(item, masterSet)
-		swaps(item, masterSet)
-		inserts(item, masterSet)
+def candidates(word): 
+    "Generate possible spelling corrections for word."
+    return (known([word]) or known(edits1(word)) or known(edits2(word)) or [word])
 
-	return masterSet
-	
-def replacements(string, masterSet):
-	n = len(string)
-	replaceSet = set()
-	for i in range(n):
-		for j in range(97,123):
-			new = string[:i] + chr(j) + string[i + 1:]
-			masterSet.add(new)
+def known(words): 
+    "The subset of `words` that appear in the dictionary of WORDS."
+    return set(w for w in words if w in WORDS)
 
-def deletions(string, masterSet):
-	n = len(string)
-	deleteSet = set()
-	for i in range(n):
-		new = string[:i] + string[i+1:]
-		masterSet.add(new)
+def edits1(word):
+    "All edits that are one edit away from `word`."
+    letters    = 'abcdefghijklmnopqrstuvwxyz'
+    splits     = [(word[:i], word[i:])    for i in range(len(word) + 1)]
+    deletes    = [L + R[1:]               for L, R in splits if R]
+    transposes = [L + R[1] + R[0] + R[2:] for L, R in splits if len(R)>1]
+    replaces   = [L + c + R[1:]           for L, R in splits if R for c in letters]
+    inserts    = [L + c + R               for L, R in splits for c in letters]
+    return set(deletes + transposes + replaces + inserts)
 
-def swaps(string, masterSet):
-	n = len(string)
-	swapSet = set()
-	for i in range(n - 1):
-		new = string[:i] + string[i + 1] + string[i] + string[i + 2:]
-		masterSet.add(new)
-
-def inserts(string, masterSet):
-	n = len(string)
-	insertSet = set()
-	for i in range(n + 1):
-		for j in range(97,123):
-			if i == 0:
-				new = chr(j) + string
-			elif i == n:
-				new = string + chr(j)
-			else:
-				new = string[:i] + chr(j) + string[i:]
-			masterSet.add(new)
+def edits2(word): 
+    "All edits that are two edits away from `word`."
+    return (e2 for e1 in edits1(word) for e2 in edits1(e1))
 
 main()
