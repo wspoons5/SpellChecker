@@ -9,7 +9,7 @@ def getTestData():
     testFile = open("testSet.txt", "r")
     outfile = open("testOutcomes.csv", "w")
     test = loadTestSet(testFile)
-    outfile.write("incorrectWord,correctWord,freq,candidateCount,incorrectLength,correctLength,norvigGuess,norvigSuccess,chiSquareGuess,chiSquareSuccess,gtestGuess,gtestSuccess\n")
+    outfile.write("incorrectWord,correctWord,freq,candidateCount,incorrectLength,correctLength,norvigGuess,norvigSuccess,chiSquareGuess,chiSquareSuccess,gtestGuess,gtestSuccess,bayesGuess,bayesSuccess\n")
     for word in test.keys():
         norvigGuess = norvigCorrection(word)
         norvigSuccess = 0
@@ -17,17 +17,21 @@ def getTestData():
         chisquareSuccess = 0
         gtestGuess = gtestCorrection(word)
         gtestSuccess = 0
+        bayesGuess = bayesCorrection(word)
+        bayesSuccess = 0
         if norvigGuess == test[word]:
             norvigSuccess = 1
         if chisquareGuess == test[word]:
             chisquareSuccess = 1
         if gtestGuess == test[word]:
-            gtestSuccess = 1 
+            gtestSuccess = 1
+        if bayesGuess == test[word]:
+            bayesSuccess = 1     
         freq = P(test[word])
         candidateCount = len(candidates(word))
-        outfile.write("{},{},{},{},{},{},{},{},{},{},{},{}\n".format(word, test[word], freq, candidateCount, len(word), len(test[word]),
+        outfile.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(word, test[word], freq, candidateCount, len(word), len(test[word]),
                                                                      norvigGuess, norvigSuccess, chisquareGuess, chisquareSuccess,
-                                                                     gtestGuess, gtestSuccess))
+                                                                     gtestGuess, gtestSuccess,bayesGuess,bayesSuccess))
     testFile.close()
     outfile.close()
 
@@ -41,9 +45,32 @@ def loadTestSet(testFile):
             testMap.update({mispelling : correct})
     return testMap
 
-# def fisherExactTest(expected, observed):
-    ##implementation of a fisher exact test
-    
+def bayesClassify(expected, observed):
+    theSum = sum(expected)
+    probs = [x/theSum for x in expected]
+    return calculateProb(observed, probs)
+
+def calculateProb(observed, expectedProbs):
+    nullProb = 1
+    for i in range(len(observed)):
+        nullProb *= math.pow(expectedProbs[i], observed[i])/math.factorial(observed[i])
+    return nullProb*math.factorial(sum(observed))
+
+def bayesCorrection(word):
+    expected = [1]*26
+    for char in word:
+        if 97 <= ord(char) and ord(char) <= 122:
+            expected[ord(char)-97] += 1
+    candidateSet = candidates(word)
+    candidateMap = {}
+    for candidate in candidateSet:
+        observed = [1]*26
+        for char in candidate:
+            if 97 <= ord(char) and ord(char) <= 122:
+                observed[ord(char)-97] += 1
+        candidateMap.update({candidate:bayesClassify(expected,observed)})
+    return max(candidateMap.keys(), key=lambda key: candidateMap[key])
+
 def gtest(expected, observed):
     stat = 0
     for i in range(len(expected)):
