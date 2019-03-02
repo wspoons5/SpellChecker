@@ -4,12 +4,12 @@ from collections import Counter
 
 def main():
     getTestData()
-
+    
 def getTestData():
     testFile = open("testSet.txt", "r")
     outfile = open("testOutcomes.csv", "w")
     test = loadTestSet(testFile)
-    outfile.write("incorrectWord,correctWord,freq,candidateCount,incorrectLength,correctLength,norvigGuess,norvigSuccess,chiSquareGuess,chiSquareSuccess,gtestGuess,gtestSuccess,bayesGuess,bayesSuccess\n")
+    outfile.write("incorrectWord,correctWord,freq,candidateCount,incorrectLength,correctLength,norvigGuess,norvigSuccess,chiSquareGuess,chiSquareSuccess,gtestGuess,gtestSuccess,multinomialGuess,multinomialSuccess\n")
     for word in test.keys():
         norvigGuess = norvigCorrection(word)
         norvigSuccess = 0
@@ -17,21 +17,21 @@ def getTestData():
         chisquareSuccess = 0
         gtestGuess = gtestCorrection(word)
         gtestSuccess = 0
-        bayesGuess = bayesCorrection(word)
-        bayesSuccess = 0
+        multinomialGuess = multinomialCorrection(word)
+        multinomialSuccess = 0
         if norvigGuess == test[word]:
             norvigSuccess = 1
         if chisquareGuess == test[word]:
             chisquareSuccess = 1
         if gtestGuess == test[word]:
             gtestSuccess = 1
-        if bayesGuess == test[word]:
-            bayesSuccess = 1     
+        if multinomialGuess == test[word]:
+            multinomialSuccess = 1     
         freq = P(test[word])
         candidateCount = len(candidates(word))
         outfile.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(word, test[word], freq, candidateCount, len(word), len(test[word]),
                                                                      norvigGuess, norvigSuccess, chisquareGuess, chisquareSuccess,
-                                                                     gtestGuess, gtestSuccess,bayesGuess,bayesSuccess))
+                                                                     gtestGuess, gtestSuccess, multinomialGuess, multinomialSuccess))
     testFile.close()
     outfile.close()
 
@@ -45,31 +45,77 @@ def loadTestSet(testFile):
             testMap.update({mispelling : correct})
     return testMap
 
-def bayesClassify(expected, observed):
+def multinomialCorrection(word):
+
+    observed = [0]*26
+    for char in word:
+        if 97 <= ord(char) and ord(char) <= 122:
+            observed[ord(char)-97] += 1
+    candidateSet = candidates(word)
+    candidateMap = {}
+    for candidate in candidateSet:
+        expected = [0]*26
+        for char in candidate:
+            if 97 <= ord(char) and ord(char) <= 122:
+                expected[ord(char)-97] += 1
+
+        # print("{} {} {} {} {}".format(multinomialTest(expected,observed), word, candidate, observed, expected))
+
+        candidateMap.update({candidate:multinomialTest(expected,observed)})
+    return max(candidateMap.keys(), key=lambda key: candidateMap[key])    
+
+def multinomialTest(expected, observed):
     theSum = sum(expected)
     probs = [x/theSum for x in expected]
-    return calculateProb(observed, probs)
+    nullProb = calculateProb(observed, probs)
+    n = sum(observed)
+    k = len(observed)
+    return subsets(n, k, nullProb, probs)
+     
+## Finds all ways to fill k bins with n things
+def subsets(n, k, nullProb, probs):
+    sigProb = 0
+    arr = [int(x>=n) for x in range(n+k-1)]
+    step = 1
+    prob = calculateProb(convertToExpected(n,k,arr),probs)
+    if prob <= nullProb:
+        sigProb += prob
+    while step <= n:
+        arr[n] = 0
+        arr[n-step] = 1
+        prob = calculateProb(convertToExpected(n,k,arr),probs)
+        if prob <= nullProb:
+            sigProb += prob
+        for i in range(1,k-1):
+            for j in range(1,step+1):
+                arr[n+i-j] = 1
+                arr[n+i-j+1] = 0
+                prob = calculateProb(convertToExpected(n,k,arr),probs)
+                if prob <= nullProb:
+                    sigProb += prob
+        step += 1
+        arr = [int(x>=n) for x in range(n+k-1)]
+    return sigProb
+
+def convertToExpected(n, k, binaryRep):
+    expected = [0]*k
+    idxList = []
+    start = 0
+    for i in range(k-1):
+        idxList.append(binaryRep.index(1,start))
+        start = idxList[i]+1
+
+    expected[0] = idxList[0]
+    for i in range(len(idxList)-1):
+        expected[i+1] = idxList[i+1]-idxList[i]-1
+    expected[-1] = n-sum(expected)
+    return expected
 
 def calculateProb(observed, expectedProbs):
     nullProb = 1
     for i in range(len(observed)):
         nullProb *= math.pow(expectedProbs[i], observed[i])/math.factorial(observed[i])
     return nullProb*math.factorial(sum(observed))
-
-def bayesCorrection(word):
-    expected = [1]*26
-    for char in word:
-        if 97 <= ord(char) and ord(char) <= 122:
-            expected[ord(char)-97] += 1
-    candidateSet = candidates(word)
-    candidateMap = {}
-    for candidate in candidateSet:
-        observed = [1]*26
-        for char in candidate:
-            if 97 <= ord(char) and ord(char) <= 122:
-                observed[ord(char)-97] += 1
-        candidateMap.update({candidate:bayesClassify(expected,observed)})
-    return max(candidateMap.keys(), key=lambda key: candidateMap[key])
 
 def gtest(expected, observed):
     stat = 0
@@ -84,32 +130,32 @@ def chisquareTest(expected, observed):
     return stat
 
 def gtestCorrection(word):
-    expected = [1]*26
+    observed = [1]*26
     for char in word:
         if 97 <= ord(char) and ord(char) <= 122:
-            expected[ord(char)-97] += 1
+            observed[ord(char)-97] += 1
     candidateSet = candidates(word)
     candidateMap = {}
     for candidate in candidateSet:
-        observed = [1]*26
+        expected = [1]*26
         for char in candidate:
             if 97 <= ord(char) and ord(char) <= 122:
-                observed[ord(char)-97] += 1
+                expected[ord(char)-97] += 1
         candidateMap.update({candidate:gtest(expected,observed)})
     return max(candidateMap.keys(), key=lambda key: candidateMap[key])    
 
 def chiSquareCorrection(word):
-    expected = [1]*26
+    observed = [1]*26
     for char in word:
         if 97 <= ord(char) and ord(char) <= 122:
-            expected[ord(char)-97] += 1
+            observed[ord(char)-97] += 1
     candidateSet = candidates(word)
     candidateMap = {}
     for candidate in candidateSet:
-        observed = [1]*26
+        expected = [1]*26
         for char in candidate:
             if 97 <= ord(char) and ord(char) <= 122:
-                observed[ord(char)-97] += 1
+                expected[ord(char)-97] += 1
         candidateMap.update({candidate:chisquareTest(expected,observed)})
     return max(candidateMap.keys(), key=lambda key: candidateMap[key])
 
